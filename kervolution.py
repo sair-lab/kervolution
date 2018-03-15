@@ -46,14 +46,12 @@ class Kerv2d(nn.Conv2d):
             mapping='translation', kernel_type='linear', learnable_kernel=False, kernel_regularizer=False,
             alpha=0.03, balance=2, power=3, sigma=2, gamma=1):
         super(Kerv2d, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
-        self.bias_flag, self.stride, self.padding, self.dilation, self.groups = bias, stride, padding, dilation, groups
-        self.kernel_size, self.mapping, self.kernel_type = kernel_size, mapping, kernel_type
+        self.mapping, self.kernel_type = mapping, kernel_type
         self.learnable_kernel, self.kernel_regularizer = learnable_kernel, kernel_regularizer
-        self.in_channels, self.out_channels = in_channels, out_channels
         self.alpha, self.balance, self.power, self.sigma, self.gamma = alpha, balance, power, sigma, gamma
 
         # parameter for kernel type
-        self.weight_ones = Variable(torch.cuda.FloatTensor(self.weight.size()).fill_(1/(self.kernel_size**2)), requires_grad=False)
+        self.weight_ones = Variable(torch.cuda.FloatTensor(self.weight.size()).fill_(1/(kernel_size**2)), requires_grad=False)
         if learnable_kernel == True:
             self.alpha   = nn.Parameter(torch.cuda.FloatTensor([alpha]), requires_grad=True)
             self.balance = nn.Parameter(torch.cuda.FloatTensor([balance]), requires_grad=True)
@@ -92,7 +90,7 @@ class Kerv2d(nn.Conv2d):
             self.weights = self.weight
         else:
             self.weights = self.weight.view(-1)[self.mapping_index]
-            self.weights = self.weights.view(self.out_channels, self.in_channels, self.kernel_size, self.kernel_size)
+            self.weights = self.weights.view(self.out_channels, self.in_channels, self.kernel_size[0], self.kernel_size[1])
 
         y = conv2d(input, self.weights, self.bias, self.stride, self.padding, self.dilation, self.groups)
 
@@ -133,9 +131,7 @@ if __name__ == '__main__':
                      out_channels=3,             # n_filters
                      kernel_size=3,              # filter size
                      stride=1,                   # filter movement/step
-                     padding=1,                  # if want same width and length of this image after con2d, padding=(kernel_size-1)/2 if stride=1
+                     padding=1,                  # input padding
                      mapping='random',           # mapping
                      kernel_type='polynomial',   # kernel type
                      learnable_kernel=True)      # enable learning parameters
-
-    print(kerv.weight.size())
