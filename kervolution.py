@@ -51,12 +51,13 @@ class Kerv2d(nn.Conv2d):
         self.alpha, self.balance, self.power, self.sigma, self.gamma = alpha, balance, power, sigma, gamma
 
         # parameter for kernel type
-        self.weight_ones = Variable(torch.cuda.FloatTensor(self.weight.size()).fill_(1/(kernel_size**2)), requires_grad=False)
         if learnable_kernel == True:
             self.alpha   = nn.Parameter(torch.cuda.FloatTensor([alpha]), requires_grad=True)
             self.balance = nn.Parameter(torch.cuda.FloatTensor([balance]), requires_grad=True)
             self.sigma   = nn.Parameter(torch.cuda.FloatTensor([sigma]), requires_grad=True)
             self.gamma   = nn.Parameter(torch.cuda.FloatTensor([gamma]), requires_grad=True)
+        if kernel_type == 'gaussian' or kernel_type == 'cauchy':
+            self.weight_ones = Variable(torch.cuda.FloatTensor(self.weight.size()).fill_(1/(kernel_size**2)), requires_grad=False)
 
         # mapping functions
         if mapping == 'translation':
