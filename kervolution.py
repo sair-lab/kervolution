@@ -44,7 +44,7 @@ class Kerv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size, 
             stride=1, padding=0, dilation=1, groups=1, bias=True,
             mapping='translation', kernel_type='linear', learnable_kernel=False, kernel_regularizer=False,
-            alpha=0.03, balance=2, power=3, sigma=2, gamma=1):
+            alpha=0.03, balance=1, power=3, sigma=2, gamma=1):
         super(Kerv2d, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
         self.mapping, self.kernel_type = mapping, kernel_type
         self.learnable_kernel, self.kernel_regularizer = learnable_kernel, kernel_regularizer
@@ -100,7 +100,7 @@ class Kerv2d(nn.Conv2d):
         elif self.kernel_type == 'polynomial':
             outputs = (y+self.balance) ** self.power
         elif self.kernel_type == 'sigmoid':
-            outputs = (y+self.balance).tanh()
+            outputs = y.tanh()
         elif self.kernel_type == 'gaussian':
             input_norm = conv2d(input**2, self.weight_ones, None, self.stride, self.padding, self.dilation, self.groups)
             weight_norm = (self.weights**2).sum(3).sum(2).sum(1).view(1,self.out_channels,1,1)
