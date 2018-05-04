@@ -57,7 +57,7 @@ class Kerv2d(nn.Conv2d):
             self.sigma   = nn.Parameter(torch.cuda.FloatTensor([sigma]), requires_grad=True)
             self.gamma   = nn.Parameter(torch.cuda.FloatTensor([gamma]), requires_grad=True)
         if kernel_type == 'gaussian' or kernel_type == 'cauchy':
-            self.weight_ones = Variable(torch.cuda.FloatTensor(self.weight.size()).fill_(1/(kernel_size**2)), requires_grad=False)
+            self.weight_ones = Variable(torch.cuda.FloatTensor(self.weight.size()).fill_(1/self.weight.numel()), requires_grad=False)
 
         # mapping functions
         if mapping == 'translation':
@@ -103,12 +103,12 @@ class Kerv2d(nn.Conv2d):
             outputs = y.tanh()
         elif self.kernel_type == 'gaussian':
             input_norm = conv2d(input**2, self.weight_ones, None, self.stride, self.padding, self.dilation, self.groups)
-            weight_norm = (self.weights**2).sum(3).sum(2).sum(1).view(1,self.out_channels,1,1)
+            weight_norm = (self.weights**2).sum(3).sum(2).sum(1).view(1,self.out_channels,1,1)/self.weight.numel()
             weight_norm = weight_norm.expand(input_norm.size()[0],-1,input_norm.size()[2],input_norm.size()[3])
             outputs = (-self.gamma*(weight_norm+input_norm-2*y)).exp()
         elif self.kernel_type == 'cauchy':
             input_norm = conv2d(input**2, self.weight_ones, None, self.stride, self.padding, self.dilation, self.groups)
-            weight_norm = (self.weights**2).sum(3).sum(2).sum(1).view(1,self.out_channels,1,1)
+            weight_norm = (self.weights**2).sum(3).sum(2).sum(1).view(1,self.out_channels,1,1)/self.weight.numel()
             weight_norm = weight_norm.expand(input_norm.size()[0],-1,input_norm.size()[2],input_norm.size()[3])
             outputs = 1/(1+(weight_norm+input_norm-2*y)/(self.sigma**2))
         else:
