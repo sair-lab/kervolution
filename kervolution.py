@@ -24,6 +24,7 @@ from torch.autograd import Function
 from torch.nn.modules.module import Module
 from torch.nn.parameter import Parameter
 from torch.nn.functional import conv2d
+import torch.nn.functional as F
 import numpy as np
 
 
@@ -59,63 +60,74 @@ class Kerv2d(nn.Conv2d):
         if kernel_type == 'gaussian' or kernel_type == 'cauchy':
             self.weight_ones = Variable(torch.cuda.FloatTensor(self.weight.size()).fill_(1/self.weight.numel()), requires_grad=False)
 
-        # mapping functions
-        if mapping == 'translation':
-            return
+        # # mapping functions
+        # if mapping == 'translation':
+        #     return
         
-        index_all = np.reshape(np.arange(self.weight.nelement()), (out_channels*in_channels, kernel_size**2))
-        if mapping == 'polar':
-            import cv2
-            center = (kernel_size/2, kernel_size/2)
-            radius = (kernel_size+1) / 2.0
-            index = np.reshape(np.arange(kernel_size**2),(kernel_size,kernel_size))
-            maps =  np.reshape(cv2.linearPolar(index, center, radius, cv2.WARP_FILL_OUTLIERS).astype(int), (kernel_size**2))
-            index_all[:,:] = index_all[:,maps]
-        elif mapping == 'logpolar':
-            import cv2
-            center = (kernel_size/2, kernel_size/2)
-            radius = (kernel_size+1) / 2.0
-            M = kernel_size / np.log(radius)
-            index = np.reshape(np.arange(kernel_size**2),(kernel_size,kernel_size))
-            maps =  np.reshape(cv2.logPolar(index, center, M, cv2.WARP_FILL_OUTLIERS).astype(int), (kernel_size**2))
-            index_all[:,:] = index_all[:,maps]
-        elif mapping == 'random':
-            for i in range(out_channels*in_channels):
-                index_all[i,:] = index_all[i, np.random.randint(low=0, high=kernel_size**2, size=kernel_size**2)]
-        else:
-            NotImplementedError()
-        self.mapping_index = torch.cuda.LongTensor(index_all).view(-1)
+        # index_all = np.reshape(np.arange(self.weight.nelement()), (out_channels*in_channels, kernel_size**2))
+        # if mapping == 'polar':
+        #     import cv2
+        #     center = (kernel_size/2, kernel_size/2)
+        #     radius = (kernel_size+1) / 2.0
+        #     index = np.reshape(np.arange(kernel_size**2),(kernel_size,kernel_size))
+        #     maps =  np.reshape(cv2.linearPolar(index, center, radius, cv2.WARP_FILL_OUTLIERS).astype(int), (kernel_size**2))
+        #     index_all[:,:] = index_all[:,maps]
+        # elif mapping == 'logpolar':
+        #     import cv2
+        #     center = (kernel_size/2, kernel_size/2)
+        #     radius = (kernel_size+1) / 2.0
+        #     M = kernel_size / np.log(radius)
+        #     index = np.reshape(np.arange(kernel_size**2),(kernel_size,kernel_size))
+        #     maps =  np.reshape(cv2.logPolar(index, center, M, cv2.WARP_FILL_OUTLIERS).astype(int), (kernel_size**2))
+        #     index_all[:,:] = index_all[:,maps]
+        # elif mapping == 'random':
+        #     for i in range(out_channels*in_channels):
+        #         index_all[i,:] = index_all[i, np.random.randint(low=0, high=kernel_size**2, size=kernel_size**2)]
+        # else:
+        #     NotImplementedError()
+        # self.mapping_index = torch.cuda.LongTensor(index_all).view(-1)
 
     def forward(self, input):
-        if self.mapping == 'translation':
-            self.weights = self.weight
-        else:
-            self.weights = self.weight.view(-1)[self.mapping_index]
-            self.weights = self.weights.view(self.out_channels, self.in_channels, self.kernel_size[0], self.kernel_size[1])
 
-        y = conv2d(input, self.weights, self.bias, self.stride, self.padding, self.dilation, self.groups)
+        # if self.mapping == 'translation':
+        #     self.weights = self.weight
+        # else:
+        #     self.weights = self.weight.view(-1)[self.mapping_index]
+        #     self.weights = self.weights.view(self.out_channels, self.in_channels, self.kernel_size[0], self.kernel_size[1])
+        
+        minibatch, _, input_width, input_hight = input.size()
+        input_unfold = F.unfold(input, kernel_size=self.kernel_size, dilation=self.dilation, padding=self.padding, stride=self.stride)
+        input_unfold = input_unfold.view(minibatch, 1, self.kernel_size[0]*self.kernel_size[1]*self.in_channels, -1)
+        weight_flat  = self.weight.view(self.out_channels, -1)
+        output_width = (input_width - self.kernel_size[0] + 2 * self.padding[0]) // self.stride[0] + 1
+        output_hight = (input_hight - self.kernel_size[1] + 2 * self.padding[1]) // self.stride[1] + 1
 
         if self.kernel_type == 'linear':
-            return y
+            # return conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+            if self.bias is None:
+                output = weight_flat @ input_unfold
+            else:
+                output = weight_flat @ input_unfold + self.bias.view(self.out_channels,-1)
+            return output.view(minibatch, self.out_channels, output_width, output_hight)
         elif self.kernel_type == 'polynomial':
             outputs = (y+self.balance) ** self.power
         elif self.kernel_type == 'sigmoid':
             outputs = y.tanh()
         elif self.kernel_type == 'gaussian':
             input_norm = conv2d(input**2, self.weight_ones, None, self.stride, self.padding, self.dilation, self.groups)
-            weight_norm = (self.weights**2).sum(3).sum(2).sum(1).view(1,self.out_channels,1,1)/self.weight.numel()
+            weight_norm = (self.weight**2).sum(3).sum(2).sum(1).view(1,self.out_channels,1,1)/self.weight.numel()
             weight_norm = weight_norm.expand(input_norm.size()[0],-1,input_norm.size()[2],input_norm.size()[3])
             outputs = (-self.gamma*(weight_norm+input_norm-2*y)).exp()
         elif self.kernel_type == 'cauchy':
             input_norm = conv2d(input**2, self.weight_ones, None, self.stride, self.padding, self.dilation, self.groups)
-            weight_norm = (self.weights**2).sum(3).sum(2).sum(1).view(1,self.out_channels,1,1)/self.weight.numel()
+            weight_norm = (self.weight**2).sum(3).sum(2).sum(1).view(1,self.out_channels,1,1)/self.weight.numel()
             weight_norm = weight_norm.expand(input_norm.size()[0],-1,input_norm.size()[2],input_norm.size()[3])
             outputs = 1/(1+(weight_norm+input_norm-2*y)/(self.sigma**2))
         else:
             return NotImplementedError()
 
         if self.kernel_regularizer:
-            outputs = outputs + self.alpha * self.weights.abs().mean()
+            outputs = outputs + self.alpha * self.weight.abs().mean()
         
         return outputs
 
