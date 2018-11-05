@@ -79,7 +79,8 @@ class Kerv2d(nn.Conv2d):
             output = ((input_unfold * weight_flat).sum(dim=2) + self.balance)**self.power
 
         elif self.kernel_type == 'gaussian':
-            output = (-self.gamma*((input_unfold - weight_flat).pow(2).sum(dim=2))).exp()
+            output = (-self.gamma*((input_unfold - weight_flat)**2).sum(dim=2)).exp() + 0
+
         else:
             raise NotImplementedError(self.kernel_type+' kervolution not implemented')
 
