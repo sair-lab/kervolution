@@ -42,18 +42,17 @@ class Kerv2d(nn.Conv2d):
     '''
     def __init__(self, in_channels, out_channels, kernel_size, 
             stride=1, padding=0, dilation=1, groups=1, bias=True,
-            mapping='translation', kernel_type='linear', learnable_kernel=False, kernel_regularizer=False,
-            alpha=0.03, balance=1, power=3, sigma=2, gamma=1):
+            kernel_type='linear', learnable_kernel=False, kernel_regularizer=False,
+            balance=1, power=3, gamma=1):
 
         super(Kerv2d, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
-        self.mapping, self.kernel_type = mapping, kernel_type
+        self.kernel_type = kernel_type
         self.learnable_kernel, self.kernel_regularizer = learnable_kernel, kernel_regularizer
-        self.alpha, self.balance, self.power, self.sigma, self.gamma = alpha, balance, power, sigma, gamma
+        self.balance, self.power, self.gamma = balance, power, gamma
 
         # parameter for kernel type
         if learnable_kernel == True:
             self.balance = nn.Parameter(torch.cuda.FloatTensor([balance] * out_channels), requires_grad=True).view(-1, 1)
-            self.sigma   = nn.Parameter(torch.cuda.FloatTensor([sigma]   * out_channels), requires_grad=True).view(-1, 1)
             self.gamma   = nn.Parameter(torch.cuda.FloatTensor([gamma]   * out_channels), requires_grad=True).view(-1, 1)
 
     def forward(self, input):
@@ -67,25 +66,22 @@ class Kerv2d(nn.Conv2d):
         output_hight = (input_hight - self.kernel_size[1] + 2 * self.padding[1]) // self.stride[1] + 1
 
         if self.kernel_type == 'linear':
-            output = conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+            # return conv2d(input, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+            output = (input_unfold * weight_flat).sum(dim=2)
 
-        elif self.kernel_type == 'diff':
-            output = (input_unfold - weight_flat).sum(dim=2)
+        elif self.kernel_type == 'manhattan':
+            output = -((input_unfold - weight_flat).abs().sum(dim=2))
 
-        elif self.kernel_type == '1-norm':
-            output = (input_unfold - weight_flat).abs().sum(dim=2)
-
-        elif self.kernel_type == '2-norm':
-            output = ((input_unfold - weight_flat)**2).sum(dim=2)
-
-        elif self.kernel_type == '3-norm':
-            output = ((input_unfold - weight_flat)**3).sum(dim=2)
+        elif self.kernel_type == 'euclidean':
+            output = -(((input_unfold - weight_flat)**2).sum(dim=2))
 
         elif self.kernel_type == 'polynomial':
             output = ((input_unfold * weight_flat).sum(dim=2) + self.balance)**self.power
 
         elif self.kernel_type == 'gaussian':
-            output = (-(((input_unfold - weight_flat)**2).sum(dim=2)*self.gamma)).exp()
+            output = (-self.gamma*((input_unfold - weight_flat).pow(2).sum(dim=2))).exp()
+        else:
+            raise NotImplementedError(self.kernel_type+' kervolution not implemented')
 
         if self.bias is not None:
             output += self.bias.view(self.out_channels, -1)
