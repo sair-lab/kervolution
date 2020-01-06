@@ -15,10 +15,10 @@ You may also need the following commands.
 
 # Citation
 
-        @inproceedings{wang2019kervolutional,
-          title={Kervolutional Neural Networks},
-          author={Wang, Chen and Yang, Jianfei and Xie, Lihua and Yuan, Junsong},
-          booktitle={Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition},
-          pages={31--40},
-          year={2019}
-        }
+    @inproceedings{wang2019kervolutional,
+      title={Kervolutional Neural Networks},
+      author={Wang, Chen and Yang, Jianfei and Xie, Lihua and Yuan, Junsong},
+      booktitle={Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition},
+      pages={31--40},
+      year={2019}
+    }
